@@ -1,11 +1,19 @@
 package com.leon.mlkitdemo
 
+// Add these imports at the top
+
+// 添加这些新的导入
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -15,6 +23,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +31,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -39,24 +50,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.zIndex
+import androidx.core.view.WindowCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.launch
-
-// Add these imports at the top
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.material3.ScrollableTabRow
 
 class MainActivity : ComponentActivity() {
     private val textRecognizer = TextRecognizer()
@@ -67,13 +72,32 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 添加这些窗口设置
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+
         // Remove speechRecognizer initialization
         setContent {
             MaterialTheme {
+                // 添加系统UI控制器设置
+                val systemUiController = rememberSystemUiController()
+                DisposableEffect(systemUiController) {
+                    systemUiController.setSystemBarsColor(
+                        color = Color.Transparent,  // 使用 Compose 的 Color.Transparent
+                        darkIcons = true
+                    )
+                    onDispose {}
+                }
+
                 var recognizedText by remember { mutableStateOf("") }
                 var selectedTabIndex by remember { mutableIntStateOf(0) }
                 val tabs = listOf("文字识别", "人脸检测", "二维码扫描")  // Remove 语音识别
-                val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
+                val cameraPermissionState =
+                    rememberPermissionState(android.Manifest.permission.CAMERA)
                 // Remove micPermissionState
                 val scope = rememberCoroutineScope()
                 val context = LocalContext.current
@@ -92,7 +116,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             } else {
                                 @Suppress("DEPRECATION")
-                                MediaStore.Images.Media.getBitmap(context.contentResolver, selectedUri)
+                                MediaStore.Images.Media.getBitmap(
+                                    context.contentResolver,
+                                    selectedUri
+                                )
                             }
                             recognizedText = when (selectedTabIndex) {
                                 0 -> textRecognizer.recognizeText(bitmap)
@@ -108,114 +135,103 @@ class MainActivity : ComponentActivity() {
                     when {
                         cameraPermissionState.status.isGranted -> {
                             Column(
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .statusBarsPadding()
                             ) {
-                                Surface(
-                                    shadowElevation = 8.dp,
-                                    tonalElevation = 8.dp,
-                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                // 相机预览
+                                Box(
                                     modifier = Modifier
+                                        .weight(1f)
                                         .fillMaxWidth()
-                                        .zIndex(1f)  // 确保显示在最上层
                                 ) {
-                                    ScrollableTabRow(
-                                        selectedTabIndex = selectedTabIndex,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        edgePadding = 0.dp  // 移除边缘padding
-                                    ) {
-                                        tabs.forEachIndexed { index, title ->
-                                            Tab(
-                                                selected = selectedTabIndex == index,
-                                                onClick = { selectedTabIndex = index },
-                                                text = {
-                                                    Text(
-                                                        text = title,
-                                                        color = if (selectedTabIndex == index)
-                                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                                        else
-                                                            MaterialTheme.colorScheme.onPrimaryContainer.copy(
-                                                                alpha = 0.6f
-                                                            )
-                                                    )
+                                    CameraPreview(
+                                        modifier = Modifier.fillMaxSize(),
+                                        onImageCaptured = { bitmap ->
+                                            scope.launch {
+                                                recognizedText = when (selectedTabIndex) {
+                                                    0 -> textRecognizer.recognizeText(bitmap)
+                                                    1 -> faceDetector.detectFaces(bitmap)
+                                                    2 -> qrCodeScanner.scanQRCode(bitmap)
+                                                    else -> ""
                                                 }
-                                            )
-                                        }
+                                            }
+                                        },
+                                        onGalleryClick = {
+                                            galleryLauncher.launch("image/*")
+                                        },
+                                        captureButtonText = when (selectedTabIndex) {
+                                            0 -> "拍照识别文字"
+                                            1 -> "拍照检测人脸"
+                                            2 -> "拍照扫描二维码"
+                                            else -> ""
+                                        },
+                                        useFrontCamera = selectedTabIndex == 1
+                                    )
+                                }
+
+                                // Tab栏
+                                ScrollableTabRow(
+                                    selectedTabIndex = selectedTabIndex,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    edgePadding = 0.dp,
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(
+                                        alpha = 0.95f
+                                    )
+                                ) {
+                                    tabs.forEachIndexed { index, title ->
+                                        Tab(
+                                            selected = selectedTabIndex == index,
+                                            onClick = { selectedTabIndex = index },
+                                            text = {
+                                                Text(
+                                                    text = title,
+                                                    color = if (selectedTabIndex == index)
+                                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                                    else
+                                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                            alpha = 0.6f
+                                                        )
+                                                )
+                                            }
+                                        )
                                     }
                                 }
 
-                                // 相机预览和结果显示区域
-                                Column(
+                                // 结果显示区域
+                                Surface(
                                     modifier = Modifier
-                                        .fillMaxSize()
                                         .weight(1f)
+                                        .fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shadowElevation = 4.dp
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxWidth()
-                                    ) {
-                                        CameraPreview(  // Remove speech recognition UI condition
-                                            modifier = Modifier.fillMaxSize(),
-                                            onImageCaptured = { bitmap ->
-                                                scope.launch {
-                                                    recognizedText = when (selectedTabIndex) {
-                                                        0 -> textRecognizer.recognizeText(bitmap)
-                                                        1 -> faceDetector.detectFaces(bitmap)
-                                                        2 -> qrCodeScanner.scanQRCode(bitmap)
-                                                        else -> ""
-                                                    }
-                                                }
-                                            },
-                                            onGalleryClick = {
-                                                galleryLauncher.launch("image/*")
-                                            },
-                                            captureButtonText = when (selectedTabIndex) {
-                                                0 -> "拍照识别文字"
-                                                1 -> "拍照检测人脸"
-                                                2 -> "拍照扫描二维码"
+                                    Text(
+                                        text = if (recognizedText.isEmpty()) {
+                                            when (selectedTabIndex) {
+                                                0 -> "识别结果将显示在这里"
+                                                1 -> "人脸检测结果将显示在这里"
+                                                2 -> "二维码扫描结果将显示在这里"
                                                 else -> ""
-                                            },
-                                            useFrontCamera = selectedTabIndex == 1  // 人脸检测时使用前置摄像头
-                                        )
-                                    }
-
-                                    Surface(
+                                            }
+                                        } else recognizedText,
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        shadowElevation = 4.dp
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(16.dp)
-                                        ) {
-                                            Text(
-                                                text = if (recognizedText.isEmpty()) {
-                                                    when (selectedTabIndex) {
-                                                        0 -> "识别结果将显示在这里"
-                                                        1 -> "人脸检测结果将显示在这里"
-                                                        2 -> "二维码扫描结果将显示在这里"
-                                                        else -> ""
+                                            .fillMaxSize()
+                                            .padding(16.dp)
+                                            .verticalScroll(rememberScrollState())
+                                            .pointerInput(Unit) {
+                                                detectTapGestures(
+                                                    onLongPress = {
+                                                        val clipboardManager = context.getSystemService(
+                                                            Context.CLIPBOARD_SERVICE
+                                                        ) as ClipboardManager
+                                                        val clip = ClipData.newPlainText("扫描结果", recognizedText)
+                                                        clipboardManager.setPrimaryClip(clip)
+                                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
                                                     }
-                                                } else recognizedText,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .verticalScroll(rememberScrollState())
-                                                    .pointerInput(Unit) {
-                                                        detectTapGestures(
-                                                            onLongPress = {
-                                                                val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                                val clip = ClipData.newPlainText("扫描结果", recognizedText)
-                                                                clipboardManager.setPrimaryClip(clip)
-                                                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                                                            }
-                                                        )
-                                                    }
-                                            )
-                                        }
-                                    }
+                                                )
+                                            }
+                                    )
                                 }
                             }
                         }

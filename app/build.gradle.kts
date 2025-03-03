@@ -65,24 +65,25 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    
+
     // ML Kit dependencies
     implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
-    
+
     // CameraX
     implementation("androidx.camera:camera-camera2:1.3.1")
     implementation("androidx.camera:camera-lifecycle:1.3.1")
     implementation("androidx.camera:camera-view:1.3.1")
-    
+
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.32.0")
-    
+
     // Coroutines Play Services
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
-    
+
     // ML Kit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.5")
-    
+
     // ML Kit Barcode Scanning
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.32.0")
 }
