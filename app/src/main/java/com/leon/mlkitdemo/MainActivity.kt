@@ -28,7 +28,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -57,22 +56,25 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material3.ScrollableTabRow
 
 class MainActivity : ComponentActivity() {
     private val textRecognizer = TextRecognizer()
     private val faceDetector = FaceDetector()
-    private val qrCodeScanner = QRCodeScanner()  // Add this line
+    private val qrCodeScanner = QRCodeScanner()
+    // Remove speechRecognizer property
 
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Remove speechRecognizer initialization
         setContent {
             MaterialTheme {
                 var recognizedText by remember { mutableStateOf("") }
                 var selectedTabIndex by remember { mutableIntStateOf(0) }
-                val tabs = listOf("文字识别", "人脸检测", "二维码扫描")  // Update tabs list
-                val cameraPermissionState =
-                    rememberPermissionState(android.Manifest.permission.CAMERA)
+                val tabs = listOf("文字识别", "人脸检测", "二维码扫描")  // Remove 语音识别
+                val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
+                // Remove micPermissionState
                 val scope = rememberCoroutineScope()
                 val context = LocalContext.current
 
@@ -116,10 +118,10 @@ class MainActivity : ComponentActivity() {
                                         .fillMaxWidth()
                                         .zIndex(1f)  // 确保显示在最上层
                                 ) {
-                                    TabRow(
+                                    ScrollableTabRow(
                                         selectedTabIndex = selectedTabIndex,
-                                        modifier = Modifier
-                                            .fillMaxWidth(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        edgePadding = 0.dp  // 移除边缘padding
                                     ) {
                                         tabs.forEachIndexed { index, title ->
                                             Tab(
@@ -152,7 +154,7 @@ class MainActivity : ComponentActivity() {
                                             .weight(1f)
                                             .fillMaxWidth()
                                     ) {
-                                        CameraPreview(
+                                        CameraPreview(  // Remove speech recognition UI condition
                                             modifier = Modifier.fillMaxSize(),
                                             onImageCaptured = { bitmap ->
                                                 scope.launch {
