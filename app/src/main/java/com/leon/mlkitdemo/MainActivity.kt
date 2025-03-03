@@ -27,10 +27,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -48,89 +52,145 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val textRecognizer = TextRecognizer()
+    private val faceDetector = FaceDetector()
 
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var recognizedText by remember { mutableStateOf("") }
-            val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
-            val scope = rememberCoroutineScope()
-            val context = LocalContext.current
+            MaterialTheme {
+                var recognizedText by remember { mutableStateOf("") }
+                var selectedTabIndex by remember { mutableIntStateOf(0) }
+                val tabs = listOf("文字识别", "人脸检测")
+                val cameraPermissionState =
+                    rememberPermissionState(android.Manifest.permission.CAMERA)
+                val scope = rememberCoroutineScope()
+                val context = LocalContext.current
 
-            val galleryLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent()
-            ) { uri: Uri? ->
-                uri?.let { selectedUri ->
-                    scope.launch {
-                        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            ImageDecoder.decodeBitmap(
-                                ImageDecoder.createSource(
-                                    context.contentResolver,
-                                    selectedUri
+                val galleryLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri: Uri? ->
+                    uri?.let { selectedUri ->
+                        scope.launch {
+                            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                ImageDecoder.decodeBitmap(
+                                    ImageDecoder.createSource(
+                                        context.contentResolver,
+                                        selectedUri
+                                    )
                                 )
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            MediaStore.Images.Media.getBitmap(context.contentResolver, selectedUri)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                MediaStore.Images.Media.getBitmap(context.contentResolver, selectedUri)
+                            }
+                            recognizedText = if (selectedTabIndex == 0) {
+                                textRecognizer.recognizeText(bitmap)
+                            } else {
+                                faceDetector.detectFaces(bitmap)
+                            }
                         }
-                        recognizedText = textRecognizer.recognizeText(bitmap)
                     }
                 }
-            }
 
-            Surface(modifier = Modifier.fillMaxSize()) {
-                when {
-                    cameraPermissionState.status.isGranted -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            // 相机预览
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        cameraPermissionState.status.isGranted -> {
+                            Column(
+                                modifier = Modifier.fillMaxSize()
                             ) {
-                                CameraPreview(
-                                    modifier = Modifier.fillMaxSize(),
-                                    onImageCaptured = { bitmap ->
-                                        scope.launch {
-                                            recognizedText = textRecognizer.recognizeText(bitmap)
+                                Surface(
+                                    shadowElevation = 8.dp,
+                                    tonalElevation = 8.dp,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .zIndex(1f)  // 确保显示在最上层
+                                ) {
+                                    TabRow(
+                                        selectedTabIndex = selectedTabIndex,
+                                        modifier = Modifier
+                                            .fillMaxWidth(),
+                                    ) {
+                                        tabs.forEachIndexed { index, title ->
+                                            Tab(
+                                                selected = selectedTabIndex == index,
+                                                onClick = { selectedTabIndex = index },
+                                                text = {
+                                                    Text(
+                                                        text = title,
+                                                        color = if (selectedTabIndex == index)
+                                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                                        else
+                                                            MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                                alpha = 0.6f
+                                                            )
+                                                    )
+                                                }
+                                            )
                                         }
-                                    },
-                                    onGalleryClick = {
-                                        galleryLauncher.launch("image/*")
                                     }
-                                )
-                            }
+                                }
 
-                            // 识别结果显示区域 (Surface)
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.surface,
-                                shadowElevation = 4.dp
-                            ) {
-                                Box(
+                                // 相机预览和结果显示区域
+                                Column(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(16.dp)
+                                        .weight(1f)
                                 ) {
-                                    Text(
-                                        text = if (recognizedText.isEmpty()) "识别结果将显示在这里" else recognizedText,
+                                    Box(
                                         modifier = Modifier
+                                            .weight(1f)
                                             .fillMaxWidth()
-                                            .verticalScroll(rememberScrollState())
-                                    )
+                                    ) {
+                                        CameraPreview(
+                                            modifier = Modifier.fillMaxSize(),
+                                            onImageCaptured = { bitmap ->
+                                                scope.launch {
+                                                    recognizedText = if (selectedTabIndex == 0) {
+                                                        textRecognizer.recognizeText(bitmap)
+                                                    } else {
+                                                        faceDetector.detectFaces(bitmap)
+                                                    }
+                                                }
+                                            },
+                                            onGalleryClick = {
+                                                galleryLauncher.launch("image/*")
+                                            },
+                                            captureButtonText = if (selectedTabIndex == 0) "拍照识别文字" else "拍照检测人脸",
+                                            useFrontCamera = selectedTabIndex == 1  // 人脸检测时使用前置摄像头
+                                        )
+                                    }
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shadowElevation = 4.dp
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp)
+                                        ) {
+                                            Text(
+                                                text = if (recognizedText.isEmpty()) {
+                                                    if (selectedTabIndex == 0) "识别结果将显示在这里" else "人脸检测结果将显示在这里"
+                                                } else recognizedText,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .verticalScroll(rememberScrollState())
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    else -> {
-                        Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
-                            Text("Request Camera Permission")
+                        else -> {
+                            Button(onClick = { cameraPermissionState.launchPermissionRequest() }) {
+                                Text("Request Camera Permission")
+                            }
                         }
                     }
                 }
@@ -143,7 +203,9 @@ class MainActivity : ComponentActivity() {
 fun CameraPreview(
     modifier: Modifier = Modifier,
     onImageCaptured: (Bitmap) -> Unit,
-    onGalleryClick: () -> Unit
+    onGalleryClick: () -> Unit,
+    captureButtonText: String,
+    useFrontCamera: Boolean = false  // 添加参数控制使用前置还是后置摄像头
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -155,9 +217,13 @@ fun CameraPreview(
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
     }
-    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    val cameraSelector = if (useFrontCamera) {
+        CameraSelector.DEFAULT_FRONT_CAMERA
+    } else {
+        CameraSelector.DEFAULT_BACK_CAMERA
+    }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(useFrontCamera) {  // 改变这里，让它响应 useFrontCamera 的变化
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         val cameraProvider = cameraProviderFuture.get()
 
@@ -181,7 +247,7 @@ fun CameraPreview(
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
-        
+
         // 底部按钮栏
         Row(
             modifier = Modifier
@@ -195,7 +261,7 @@ fun CameraPreview(
             ) {
                 Text("从相册选择")
             }
-            
+
             Button(
                 onClick = {
                     scope.launch {
@@ -206,7 +272,7 @@ fun CameraPreview(
                     }
                 }
             ) {
-                Text("拍照识别")
+                Text(captureButtonText)
             }
         }
     }
