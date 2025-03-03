@@ -50,9 +50,18 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
 
+// Add these imports at the top
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+
 class MainActivity : ComponentActivity() {
     private val textRecognizer = TextRecognizer()
     private val faceDetector = FaceDetector()
+    private val qrCodeScanner = QRCodeScanner()  // Add this line
 
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +70,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 var recognizedText by remember { mutableStateOf("") }
                 var selectedTabIndex by remember { mutableIntStateOf(0) }
-                val tabs = listOf("文字识别", "人脸检测")
+                val tabs = listOf("文字识别", "人脸检测", "二维码扫描")  // Update tabs list
                 val cameraPermissionState =
                     rememberPermissionState(android.Manifest.permission.CAMERA)
                 val scope = rememberCoroutineScope()
@@ -83,10 +92,11 @@ class MainActivity : ComponentActivity() {
                                 @Suppress("DEPRECATION")
                                 MediaStore.Images.Media.getBitmap(context.contentResolver, selectedUri)
                             }
-                            recognizedText = if (selectedTabIndex == 0) {
-                                textRecognizer.recognizeText(bitmap)
-                            } else {
-                                faceDetector.detectFaces(bitmap)
+                            recognizedText = when (selectedTabIndex) {
+                                0 -> textRecognizer.recognizeText(bitmap)
+                                1 -> faceDetector.detectFaces(bitmap)
+                                2 -> qrCodeScanner.scanQRCode(bitmap)
+                                else -> ""
                             }
                         }
                     }
@@ -146,17 +156,23 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxSize(),
                                             onImageCaptured = { bitmap ->
                                                 scope.launch {
-                                                    recognizedText = if (selectedTabIndex == 0) {
-                                                        textRecognizer.recognizeText(bitmap)
-                                                    } else {
-                                                        faceDetector.detectFaces(bitmap)
+                                                    recognizedText = when (selectedTabIndex) {
+                                                        0 -> textRecognizer.recognizeText(bitmap)
+                                                        1 -> faceDetector.detectFaces(bitmap)
+                                                        2 -> qrCodeScanner.scanQRCode(bitmap)
+                                                        else -> ""
                                                     }
                                                 }
                                             },
                                             onGalleryClick = {
                                                 galleryLauncher.launch("image/*")
                                             },
-                                            captureButtonText = if (selectedTabIndex == 0) "拍照识别文字" else "拍照检测人脸",
+                                            captureButtonText = when (selectedTabIndex) {
+                                                0 -> "拍照识别文字"
+                                                1 -> "拍照检测人脸"
+                                                2 -> "拍照扫描二维码"
+                                                else -> ""
+                                            },
                                             useFrontCamera = selectedTabIndex == 1  // 人脸检测时使用前置摄像头
                                         )
                                     }
@@ -175,11 +191,26 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             Text(
                                                 text = if (recognizedText.isEmpty()) {
-                                                    if (selectedTabIndex == 0) "识别结果将显示在这里" else "人脸检测结果将显示在这里"
+                                                    when (selectedTabIndex) {
+                                                        0 -> "识别结果将显示在这里"
+                                                        1 -> "人脸检测结果将显示在这里"
+                                                        2 -> "二维码扫描结果将显示在这里"
+                                                        else -> ""
+                                                    }
                                                 } else recognizedText,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .verticalScroll(rememberScrollState())
+                                                    .pointerInput(Unit) {
+                                                        detectTapGestures(
+                                                            onLongPress = {
+                                                                val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                                val clip = ClipData.newPlainText("扫描结果", recognizedText)
+                                                                clipboardManager.setPrimaryClip(clip)
+                                                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        )
+                                                    }
                                             )
                                         }
                                     }

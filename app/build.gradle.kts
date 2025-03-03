@@ -82,4 +82,7 @@ dependencies {
     
     // ML Kit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.5")
+    
+    // ML Kit Barcode Scanning
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }
