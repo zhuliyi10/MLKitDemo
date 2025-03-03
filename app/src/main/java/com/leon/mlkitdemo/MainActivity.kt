@@ -6,6 +6,7 @@ package com.leon.mlkitdemo
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -57,11 +58,14 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import androidx.core.content.FileProvider
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val textRecognizer = TextRecognizer()
@@ -93,7 +97,6 @@ class MainActivity : ComponentActivity() {
                     onDispose {}
                 }
 
-                var recognizedText by remember { mutableStateOf("") }
                 var selectedTabIndex by remember { mutableIntStateOf(0) }
                 val tabs = listOf("文字识别", "人脸检测", "二维码扫描")  // Remove 语音识别
                 val cameraPermissionState =
@@ -121,12 +124,13 @@ class MainActivity : ComponentActivity() {
                                     selectedUri
                                 )
                             }
-                            recognizedText = when (selectedTabIndex) {
+                            val result = when (selectedTabIndex) {
                                 0 -> textRecognizer.recognizeText(bitmap)
                                 1 -> faceDetector.detectFaces(bitmap)
                                 2 -> qrCodeScanner.scanQRCode(bitmap)
                                 else -> ""
                             }
+                            navigateToResult(bitmap, result)
                         }
                     }
                 }
@@ -149,12 +153,13 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxSize(),
                                         onImageCaptured = { bitmap ->
                                             scope.launch {
-                                                recognizedText = when (selectedTabIndex) {
+                                                val result = when (selectedTabIndex) {
                                                     0 -> textRecognizer.recognizeText(bitmap)
                                                     1 -> faceDetector.detectFaces(bitmap)
                                                     2 -> qrCodeScanner.scanQRCode(bitmap)
                                                     else -> ""
                                                 }
+                                                navigateToResult(bitmap, result)
                                             }
                                         },
                                         onGalleryClick = {
@@ -197,42 +202,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-
-                                // 结果显示区域
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shadowElevation = 4.dp
-                                ) {
-                                    Text(
-                                        text = if (recognizedText.isEmpty()) {
-                                            when (selectedTabIndex) {
-                                                0 -> "识别结果将显示在这里"
-                                                1 -> "人脸检测结果将显示在这里"
-                                                2 -> "二维码扫描结果将显示在这里"
-                                                else -> ""
-                                            }
-                                        } else recognizedText,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(16.dp)
-                                            .verticalScroll(rememberScrollState())
-                                            .pointerInput(Unit) {
-                                                detectTapGestures(
-                                                    onLongPress = {
-                                                        val clipboardManager = context.getSystemService(
-                                                            Context.CLIPBOARD_SERVICE
-                                                        ) as ClipboardManager
-                                                        val clip = ClipData.newPlainText("扫描结果", recognizedText)
-                                                        clipboardManager.setPrimaryClip(clip)
-                                                        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                )
-                                            }
-                                    )
-                                }
                             }
                         }
 
@@ -245,6 +214,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun saveBitmapToTempFile(bitmap: Bitmap): Uri {
+        val tempFile = File(cacheDir, "temp_image.jpg")
+        tempFile.outputStream().use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+        }
+        return FileProvider.getUriForFile(
+            this,
+            "${applicationContext.packageName}.provider",
+            tempFile
+        )
+    }
+
+    private fun navigateToResult(bitmap: Bitmap, result: String) {
+        val imageUri = saveBitmapToTempFile(bitmap)
+        val intent = Intent(this, ResultActivity::class.java).apply {
+            putExtra("imageUri", imageUri.toString())
+            putExtra("result", result)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(intent)
     }
 }
 
